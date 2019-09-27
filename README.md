@@ -1,0 +1,3 @@
+# lbox
+
+A static photo gallery and lightbox generator for the web...
