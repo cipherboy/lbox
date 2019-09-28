@@ -6,11 +6,40 @@
     <title>Example Gallery | lbox</title>
     <link href="lbox.css" rel="stylesheet">
   </head>
-  <body onload="lboxInit()">
-    <div id="lbox">
-      <div id="lboxHeader"></div>
-      <div id="lboxFooter"></div>
-    </div>
+  <body>
+    <div id="lboxContainer"></div>
+    <script>
+        function handler(){
+            let config = {
+                "images": [
+                    {
+                        "src": "img/boston.jpg",
+                    },
+                    {
+                        "src": "img/chinatown.jpg",
+                        "footer": "Five Spice Restaurant in Boston's Chinatown. Shot at night on a Nikon D750 with 22mm lense."
+                    },
+                    {
+                        "src": "img/lighthouse.jpg",
+                    },
+                    {
+                        "src": "img/minneapolis.jpg",
+                    },
+                    {
+                        "src": "img/fire.jpg",
+                    },
+                    {
+                        "src": "img/ice.jpg"
+                    }
+                ],
+                "header": "Copyright (C) Katherine Mayo. All Rights Reserved.",
+                "start": 0
+            };
+
+            let l = new lbox('lboxContainer', config);
+        }
+        window.onload = handler;
+    </script>
     <script src="lbox.js"></script>
   </body>
 </html>
