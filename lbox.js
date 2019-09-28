@@ -16,46 +16,44 @@ class lbox {
         this.header = 'header' in cfg ? cfg['header'] : "";
         this.footer = 'footer' in cfg ? cfg['footer'] : "";
 
+        this.image_prefetch = 'prefetch' in cfg ? cfg['prefetch'] : 2;
+
         window._lbox = this;
         this.init();
     }
 
     one() {
         let lbox = this;
-        let img = this.images[this.cur_image]['item'];
-        console.log(img);
+        let item = this.images[this.cur_image].item;
 
         this.handlePrevious();
 
-        img.foreground.img.setAttribute('id', 'this.img');
-        img.foreground.img.style.display = 'none';
+        item.foreground.img.setAttribute('id', 'this.img');
+        item.foreground.img.style.display = 'none';
 
-        img.background.img.setAttribute('id', 'this.img');
-        img.background.img.style.display = 'none';
+        item.background.img.setAttribute('id', 'this.img');
+        item.background.img.style.display = 'none';
 
-        Utils.onImageLoaded(img.foreground.img, function() {
-            img.foreground.restyle();
-            img.header.restyle();
-            img.footer.restyle();
+        Utils.onImageLoaded(item.foreground.img, function() {
+            item.foreground.restyle();
+            item.header.restyle();
+            item.footer.restyle();
         }, null);
-        Utils.onImageLoaded(img.background.img, function() {
-            img.background.restyle();
+        Utils.onImageLoaded(item.background.img, function() {
+            item.background.restyle();
         }, null);
     }
 
     init() {
-
         let lbox = this;
         for (let index in this.images) {
             let image = this.images[index];
-            image['item'] = new Item(this, index, image['src']);
-
-            if (index == this.cur_image) {
-                setTimeout(function() {
-                    lbox.one();
-                }, 0);
-            }
+            image.item = new Item(this, index, image['src']);
         }
+
+        this.handlePrefetch(function() {
+            lbox.one();
+        });
 
         let timer = null;
         window.addEventListener("keyup", function(evt) {
@@ -88,6 +86,7 @@ class lbox {
             }
             timer = setTimeout(function() {
                 lbox.one();
+                lbox.handlePrefetch(null);
             }, 0);
         });
 
@@ -101,7 +100,7 @@ class lbox {
             return;
         }
 
-        let item = this.images[this.prev_image]['item'];
+        let item = this.images[this.prev_image].item;
         let lboxImage = item.foreground.img;
         if (lboxImage != null) {
             lboxImage.style.display = 'none';
@@ -114,6 +113,22 @@ class lbox {
             lboxBackground.style.zIndex = '10';
             lboxBackground.style.opacity = '0.3';
             lboxBackground.removeAttribute('id');
+        }
+    }
+
+    handlePrefetch(callback) {
+        let num = this.images.length;
+        for (let offset = 0; offset <= this.image_prefetch; offset++) {
+            for (let sign of [-1, 1]) {
+                let _index = this.cur_image + sign*offset;
+                let index = ((_index % num) + num) % num;
+
+                this.images[index].item.build();
+            }
+        }
+
+        if (callback != null) {
+            setTimeout(callback, 10);
         }
     }
 
@@ -134,12 +149,17 @@ class lbox {
 class Item {
     constructor(lbox, num, src) {
         this.lbox = lbox;
-        this.num = num;
+        this.index = num;
 
         this.foreground = new Foreground(lbox, this, num, src);
         this.background = new Background(lbox, this, num, src);
         this.header = new Header(lbox, this, num);
         this.footer = new Footer(lbox, this, num);
+    }
+
+    build() {
+        this.foreground.build();
+        this.background.build();
     }
 
     showInfo() {
@@ -163,17 +183,26 @@ class Item {
 }
 
 class Foreground {
-    constructor(lbox, item, index, src) {
+    constructor(lbox, item, num, src) {
         this.lbox = lbox;
         this.item = item;
-        this.num = index;
+        this.index = num;
+        this.src = src;
+
+        this.img = null;
+    }
+
+    build() {
+        if (this.img != null) {
+            return;
+        }
 
         this.img = new Image();
-        this.img.src = src;
+        this.img.src = this.src;
         this.img.style.opacity = '0.1';
         this.img.style.zIndex = '0';
         this.img.classList.add('foreground');
-        lbox.container.append(this.img);
+        this.lbox.container.append(this.img);
     }
 
     details(horizontal, vertical) {
@@ -242,13 +271,22 @@ class Background {
         this.lbox = lbox;
         this.item = item;
         this.index = num;
+        this.src = src;
+
+        this.img = null;
+    }
+
+    build() {
+        if (this.img != null) {
+            return;
+        }
 
         this.img = new Image();
-        this.img.src = src;
+        this.img.src = this.src;
         this.img.style.opacity = '0.3';
         this.img.style.zIndex = '10';
         this.img.classList.add('background');
-        lbox.container.append(this.img);
+        this.lbox.container.append(this.img);
     }
 
     size() {
@@ -319,7 +357,7 @@ class Header {
             return;
         }
 
-        let img = this.lbox.images[this.index]['item'].foreground.img;
+        let img = this.lbox.images[this.index].item.foreground.img;
         this.lbox.headerElem.style.top = img.style.top;
         this.lbox.headerElem.style.left = ((window.innerWidth - img.width)/2) + "px";
         this.lbox.headerElem.style.width = img.width + "px";
@@ -356,7 +394,7 @@ class Footer {
             return;
         }
 
-        let img = this.lbox.images[this.index]['item'].foreground.img;
+        let img = this.lbox.images[this.index].item.foreground.img;
         this.lbox.footerElem.style.bottom = "25px";
         this.lbox.footerElem.style.left = ((window.innerWidth - img.width)/2) + "px";
         this.lbox.footerElem.style.width = img.width + "px";
