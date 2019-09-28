@@ -3,10 +3,18 @@
 class lbox {
     constructor(container, cfg) {
         this.container = document.getElementById(container);
+
         this.headerElem = document.createElement("div");
         this.headerElem.classList.add('lbox-header');
+        this.container.append(this.headerElem);
+
         this.footerElem = document.createElement("div");
-        this.footerElem.classList.add('lbox-fooer');
+        this.footerElem.classList.add('lbox-footer');
+        this.container.append(this.footerElem);
+
+        this.tableElem = document.createElement("table");
+        this.tableElem.classList.add('lbox-table');
+        this.container.append(this.tableElem);
 
         this.images = cfg['images'];
 
@@ -17,6 +25,7 @@ class lbox {
         this.footer = 'footer' in cfg ? cfg['footer'] : "";
 
         this.image_prefetch = 'prefetch' in cfg ? cfg['prefetch'] : 2;
+        this.sizes = 'sizes' in cfg ? cfg['sizes'] : [];
 
         this.onImageLoaded = [];
 
@@ -51,7 +60,7 @@ class lbox {
         });
     }
 
-    carousel() {
+    table() {
         let wW = window.innerWidth;
         let wH = window.innerHeight;
 
@@ -69,7 +78,9 @@ class lbox {
             image.item = new Item(this, index, image);
         }
 
-        this.handlePrefetch();
+        this.handlePrefetch(function() {
+            lbox.table();
+        });
 
         let timer = null;
         window.addEventListener("keyup", function(evt) {
@@ -96,9 +107,7 @@ class lbox {
             timer = setTimeout(function() {
                 lbox.handleNext(amount);
             }, 0);
-
-            evt.preventDefault();
-        }, false);
+        });
 
         Utils.onDoneResize(function() {
             lbox.handlePrefetch(function() {
@@ -155,6 +164,10 @@ class lbox {
             }
         }
 
+        for (let index = 0; index < num; index++) {
+            this.images[index].item.thumbnail.build();
+        }
+
         if (callback != null) {
             setTimeout(callback, 10);
         }
@@ -182,6 +195,7 @@ class Item {
             this[key] = data[key];
         }
 
+        this.thumbnail = new Thumbnail(lbox, this, num, this.src);
         this.foreground = new Foreground(lbox, this, num, this.src);
         this.background = new Background(lbox, this, num, this.src);
         this.header = new Header(lbox, this, num);
@@ -189,6 +203,7 @@ class Item {
     }
 
     build() {
+        this.thumbnail.build();
         this.foreground.build();
         this.background.build();
     }
@@ -196,11 +211,10 @@ class Item {
     showInfo() {
         let lboxHeader = this.lbox.headerElem;
         let lboxFooter = this.lbox.footerElem;
-        if (lboxHeader.innerText != '') {
+        if (this.header.text != '') {
             lboxHeader.style.display = 'block';
         }
-
-        if (lboxFooter.innerText != '') {
+        if (this.footer.text != '') {
             lboxFooter.style.display = 'block';
         }
     }
@@ -210,6 +224,55 @@ class Item {
         let lboxFooter = this.lbox.footerElem;
         lboxHeader.style.display = 'none';
         lboxFooter.style.display = 'none';
+    }
+}
+
+class Thumbnail {
+    constructor(lbox, item, num, src) {
+        this.lbox = lbox;
+        this.item = item;
+        this.index = num;
+        this.src = src;
+
+        this.img = null;
+    }
+
+    build() {
+        if (this.img != null) {
+            return;
+        }
+
+        let min_size = Math.min(...this.lbox.sizes);
+        if ("" + min_size in this.item.thumbs) {
+            this.src = this.item.thumbs["" + min_size];
+        }
+
+        this.img = new Image();
+        this.img.src = Utils.chooseSource(this.item);
+        this.resize();
+        this.img.style.opacity = '0.1';
+        this.img.style.zIndex = '0';
+        this.img.classList.add('thumbnail');
+        this.lbox.container.append(this.img);
+    }
+
+    size() {
+        let aspect_ratio_hw = this.item.height / this.item.width;
+        let aspect_ratio_wh = this.item.width / this.item.height;
+
+        let available = 200;
+
+        let computed_height = aspect_ratio_hw * available;
+        let computed_width = aspect_ratio_wh * available;
+
+        if (computed_height < available) {
+            return [computed_width, available];
+        }
+        return [available, computed_height];
+    }
+
+    resize() {
+        let sizes = this.size();
     }
 }
 
@@ -246,8 +309,8 @@ class Foreground {
     }
 
     details(horizontal, vertical) {
-        let aspect_ratio_hw = this.img.naturalHeight / this.img.naturalWidth;
-        let aspect_ratio_wh = this.img.naturalWidth / this.img.naturalHeight;
+        let aspect_ratio_hw = this.item.height / this.item.width;
+        let aspect_ratio_wh = this.item.width / this.item.height;
 
         let available_height = window.innerHeight - 2*vertical;
         let available_width = window.innerWidth - 2*horizontal;
@@ -255,14 +318,13 @@ class Foreground {
         let computed_height = aspect_ratio_hw * available_width;
         let computed_width = aspect_ratio_wh * available_height;
 
-        if (computed_height > window.innerHeight) {
+        if (computed_height > available_height) {
             let remaining_width = window.innerWidth - computed_width;
             return [computed_width, available_height, remaining_width/2, vertical];
         }
 
         let remaining_height = window.innerHeight - computed_height;
-
-        return [available_width, computed_height, vertical, remaining_height/2];
+        return [available_width, computed_height, horizontal, remaining_height/2];
     }
 
     resize() {
@@ -277,6 +339,8 @@ class Foreground {
         let iHeight = lDetails[1];
         let iLeft = lDetails[2];
         let iTop = lDetails[3];
+
+        console.log(lDetails);
 
         this.img.style.width = iWidth + 'px';
         this.img.style.height = iHeight + 'px';
@@ -346,8 +410,8 @@ class Background {
     }
 
     size() {
-        let aspect_ratio_hw = this.img.naturalHeight / this.img.naturalWidth;
-        let aspect_ratio_wh = this.img.naturalWidth / this.img.naturalHeight;
+        let aspect_ratio_hw = this.item.height / this.item.width;
+        let aspect_ratio_wh = this.item.width / this.item.height;
 
         let available_height = window.innerHeight;
         let available_width = window.innerWidth;
@@ -395,6 +459,23 @@ class Header {
         this.index = num;
 
         this.text = this.get();
+        this.build();
+    }
+
+    build() {
+        this.lbox.headerElem.innerHTML = '';
+        if (this.text == "") {
+            return;
+        }
+
+        let textElem = document.createElement('p');
+        textElem.innerText = this.text;
+
+        this.lbox.headerElem.append(textElem);
+        if (this.text == "") {
+            this.lbox.headerElem.style.display = 'none';
+            return;
+        }
     }
 
     get() {
@@ -407,21 +488,13 @@ class Header {
     restyle() {
         let imageNum = lbox.cur_image;
 
-        let text = document.createElement('p');
-        text.innerText = this.text;
-
-        this.lbox.headerElem.append(text);
-        if (this.text == "") {
-            this.lbox.headerElem.style.display = 'none';
-            return;
-        }
-
         let img = this.lbox.images[this.index].item.foreground.img;
         this.lbox.headerElem.style.top = img.style.top;
         this.lbox.headerElem.style.left = ((window.innerWidth - img.width)/2) + "px";
         this.lbox.headerElem.style.width = img.width + "px";
         this.lbox.headerElem.style.height = '75px';
         this.lbox.headerElem.style.lineHeight = '70px';
+        this.lbox.headerElem.style.display = 'none';
     }
 }
 
@@ -432,6 +505,24 @@ class Footer {
         this.index = num;
 
         this.text = this.get();
+
+        this.build();
+    }
+
+    build() {
+        this.lbox.footerElem.innerHTML = '';
+        if (this.text == "") {
+            return;
+        }
+
+        let textElem = document.createElement('p');
+        textElem.innerText = this.text;
+
+        this.lbox.footerElem.append(textElem);
+        if (this.text == "") {
+            this.lbox.footerElem.style.display = 'none';
+            return;
+        }
     }
 
     get() {
@@ -444,17 +535,8 @@ class Footer {
     restyle() {
         let imageNum = lbox.cur_image;
 
-        let text = document.createElement('p');
-        text.innerText = this.text;
-
-        this.lbox.footerElem.append(text);
-        if (this.text == "") {
-            this.lbox.footerElem.style.display = 'none';
-            return;
-        }
-
         let img = this.lbox.images[this.index].item.foreground.img;
-        this.lbox.footerElem.style.bottom = "25px";
+        this.lbox.footerElem.style.bottom = (window.innerHeight - (img.offsetTop + img.height)) + "px";
         this.lbox.footerElem.style.left = ((window.innerWidth - img.width)/2) + "px";
         this.lbox.footerElem.style.width = img.width + "px";
         this.lbox.footerElem.style.height = '175px';
