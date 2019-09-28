@@ -15,8 +15,8 @@ html,body,#lbox {
   z-index: 40;
 }
 
-#lbox img.foreground {
-  transition: all 1s;
+img.foreground {
+  transition: opacity 0.5s ease 0.1s;
 }
 
 #lboxHeader, #lboxFooter {

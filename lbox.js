@@ -18,42 +18,58 @@ class lbox {
 
         this.image_prefetch = 'prefetch' in cfg ? cfg['prefetch'] : 2;
 
+        this.onImageLoaded = [];
+
         window._lbox = this;
         this.init();
     }
 
     one() {
         let lbox = this;
-        let item = this.images[this.cur_image].item;
+        let cur_image = this.cur_image;
+        let item = this.images[cur_image].item;
 
         this.handlePrevious();
 
-        item.foreground.img.setAttribute('id', 'this.img');
+        item.foreground.img.setAttribute('id', 'lboxForeground');
         item.foreground.img.style.display = 'none';
 
-        item.background.img.setAttribute('id', 'this.img');
+        item.background.img.setAttribute('id', 'lboxBackground');
         item.background.img.style.display = 'none';
 
-        Utils.onImageLoaded(item.foreground.img, function() {
+        Utils.onImageLoaded(lbox, item.foreground.img, function() {
             item.foreground.restyle();
             item.header.restyle();
             item.footer.restyle();
-        }, null);
-        Utils.onImageLoaded(item.background.img, function() {
+        }, function() {
+            return lbox.cur_image == cur_image;
+        });
+        Utils.onImageLoaded(lbox, item.background.img, function() {
             item.background.restyle();
-        }, null);
+        }, function() {
+            return lbox.cur_image == cur_image;
+        });
+    }
+
+    carousel() {
+        let wW = window.innerWidth;
+        let wH = window.innerHeight;
+
+        let count = width / 200;
+        if (count < 4) {
+            count = 1;
+        }
+        count = parseInt(count);
     }
 
     init() {
         let lbox = this;
         for (let index in this.images) {
             let image = this.images[index];
-            image.item = new Item(this, index, image['src']);
+            image.item = new Item(this, index, image);
         }
 
-        this.handlePrefetch(function() {
-            lbox.one();
-        });
+        this.handlePrefetch();
 
         let timer = null;
         window.addEventListener("keyup", function(evt) {
@@ -74,25 +90,34 @@ class lbox {
                 return;
             }
 
-            let cur = lbox.cur_image;
-            let num = lbox.images.length;
-            let next = (((cur + amount) % num) + num) % num;
-
-            lbox.prev_image = lbox.cur_image;
-            lbox.cur_image = next;
-
             if (timer != null) {
                 clearTimeout(timer);
             }
             timer = setTimeout(function() {
-                lbox.one();
-                lbox.handlePrefetch(null);
+                lbox.handleNext(amount);
             }, 0);
-        });
+
+            evt.preventDefault();
+        }, false);
 
         Utils.onDoneResize(function() {
-            lbox.resize();
-        }, null, 100);
+            lbox.handlePrefetch(function() {
+                lbox.restyle();
+            });
+        }, null, 50);
+    }
+
+    handleNext(amount) {
+        let lbox = this;
+        let cur = lbox.cur_image;
+        let num = lbox.images.length;
+        let next = (((cur + amount) % num) + num) % num;
+
+        lbox.prev_image = lbox.cur_image;
+        lbox.cur_image = next;
+
+        lbox.one();
+        lbox.handlePrefetch(null);
     }
 
     handlePrevious() {
@@ -104,7 +129,9 @@ class lbox {
         let lboxImage = item.foreground.img;
         if (lboxImage != null) {
             lboxImage.style.display = 'none';
+            lboxImage.style.zIndex = '0';
             lboxImage.classList.remove('visible');
+            Utils.removeImageLoaded(this, lboxImage);
             lboxImage.removeAttribute('id');
         }
 
@@ -112,6 +139,7 @@ class lbox {
         if (lboxBackground != null) {
             lboxBackground.style.zIndex = '10';
             lboxBackground.style.opacity = '0.3';
+            Utils.removeImageLoaded(this, lboxBackground);
             lboxBackground.removeAttribute('id');
         }
     }
@@ -133,26 +161,29 @@ class lbox {
     }
 
     restyle() {
-        let img = this.images[this.cur_image];
+        let item = this.images[this.cur_image].item;
         setTimeout(function() {
-            img.background.restyle();
+            item.background.resize();
         }, 0);
 
         setTimeout(function() {
-            img.foreground.restyle();
-            img.header.restyle();
-            img.footer.restyle();
+            item.foreground.resize();
+            item.header.restyle();
+            item.footer.restyle();
         }, 50);
     }
 }
 
 class Item {
-    constructor(lbox, num, src) {
+    constructor(lbox, num, data) {
         this.lbox = lbox;
         this.index = num;
+        for (let key in data) {
+            this[key] = data[key];
+        }
 
-        this.foreground = new Foreground(lbox, this, num, src);
-        this.background = new Background(lbox, this, num, src);
+        this.foreground = new Foreground(lbox, this, num, this.src);
+        this.background = new Background(lbox, this, num, this.src);
         this.header = new Header(lbox, this, num);
         this.footer = new Footer(lbox, this, num);
     }
@@ -194,11 +225,20 @@ class Foreground {
 
     build() {
         if (this.img != null) {
+            if (this.index != this.lbox.cur_image) {
+                this.img.style.zIndex = '0';
+            }
+
+            if (this.img.src != Utils.chooseSource(this.item)) {
+                this.img.src = Utils.chooseSource(this.item);
+            }
+
             return;
         }
 
         this.img = new Image();
-        this.img.src = this.src;
+        this.img.src = Utils.chooseSource(this.item);
+        this.resize();
         this.img.style.opacity = '0.1';
         this.img.style.zIndex = '0';
         this.img.classList.add('foreground');
@@ -225,7 +265,7 @@ class Foreground {
         return [available_width, computed_height, vertical, remaining_height/2];
     }
 
-    restyle() {
+    resize() {
         let item = this.item;
         let img = this.img;
 
@@ -243,10 +283,17 @@ class Foreground {
         this.img.style.position = 'fixed';
         this.img.style.left = iLeft + 'px';
         this.img.style.top = iTop + 'px';
-        this.img.style.zIndex = '60';
-        this.img.style.display = 'block';
 
         this.img.style.border = "1px solid #ffffff44";
+    }
+
+    restyle() {
+        let item = this.item;
+        let img = this.img;
+
+        this.resize();
+        this.img.style.zIndex = '60';
+        this.img.style.display = 'block';
 
         if (!this.img.classList.contains('visible')) {
             this.img.style.opacity = '0';
@@ -278,15 +325,24 @@ class Background {
 
     build() {
         if (this.img != null) {
+            if (this.index != this.lbox.cur_image) {
+                this.img.style.zIndex = '10';
+            }
+
+            if (this.img.src != Utils.chooseSource(this.item)) {
+                this.img.src = Utils.chooseSource(this.item);
+            }
+
             return;
         }
 
         this.img = new Image();
-        this.img.src = this.src;
-        this.img.style.opacity = '0.3';
-        this.img.style.zIndex = '10';
+        this.img.src = Utils.chooseSource(this.item);
         this.img.classList.add('background');
         this.lbox.container.append(this.img);
+        this.resize();
+        this.img.style.opacity = '0.3';
+        this.img.style.zIndex = '10';
     }
 
     size() {
@@ -305,8 +361,7 @@ class Background {
         return [available_width, computed_height];
     }
 
-
-    restyle() {
+    resize() {
         let parts = 64;
         let blur = Math.min(this.img.naturalWidth / parts, this.img.naturalHeight / parts);
 
@@ -324,6 +379,10 @@ class Background {
         this.img.style.top = bTop + 'px';
         this.img.style.filter = "blur(" + blur + "px)";
         this.img.style.WebkitFilter = "blur(" + blur + "px)";
+    }
+
+    restyle() {
+        this.resize();
         this.img.style.zIndex = '40';
         this.img.style.display = 'block';
     }
@@ -404,13 +463,28 @@ class Footer {
 }
 
 class Utils {
-    static onImageLoaded(img, callback, data) {
+    static onImageLoaded(lbox, img, callback, conditional) {
         if (img.complete) {
-            callback(data);
+            if (conditional == null || conditional(lbox)) {
+                callback(lbox);
+            }
         } else {
-            img.addEventListener('load', function() {
-                callback(data);
-            });
+            if (!(img in lbox.onImageLoaded)) {
+                lbox.onImageLoaded[img] = [];
+            }
+            let real_callback = function() {callback(lbox)};
+
+            lbox.onImageLoaded[img].push(real_callback);
+            img.addEventListener('load', real_callback);
+        }
+    }
+
+    static removeImageLoaded(lbox, img) {
+        if (img in lbox.onImageLoaded) {
+            for (let callback of lbox.onImageLoaded[img]) {
+                img.removeEventListener('load', callback);
+            }
+            lbox.onImageLoaded[img] = [];
         }
     }
 
@@ -425,5 +499,31 @@ class Utils {
                 callback(data);
             }, interval);
         });
+    }
+
+    static computeDimensions(size, width, height) {
+        if (width > height) {
+            let computed_height = height / width * size;
+            return [size, computed_height];
+        }
+
+        let computed_width = width / height * size;
+        return [computed_width, size];
+    }
+
+    static chooseSource(image) {
+        let wW = window.innerWidth;
+        let wH = window.innerHeight;
+        let iW = image.width;
+        let iH = image.height;
+
+        for (let size in image.thumbs) {
+            let dimensions = Utils.computeDimensions(size, iW, iH);
+            if (dimensions[0] >= wW || dimensions[1] >= wH) {
+                return image.thumbs[size];
+            }
+        }
+
+        return image.src;
     }
 }

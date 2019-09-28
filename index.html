@@ -9,32 +9,9 @@
   <body>
     <div id="lboxContainer"></div>
     <script>
-        function handler(){
-            let config = {
-                "images": [
-                    {
-                        "src": "img/boston.jpg",
-                    },
-                    {
-                        "src": "img/chinatown.jpg",
-                        "footer": "Five Spice Restaurant in Boston's Chinatown. Shot at night on a Nikon D750 with 22mm lense."
-                    },
-                    {
-                        "src": "img/lighthouse.jpg",
-                    },
-                    {
-                        "src": "img/minneapolis.jpg",
-                    },
-                    {
-                        "src": "img/fire.jpg",
-                    },
-                    {
-                        "src": "img/ice.jpg"
-                    }
-                ],
-                "header": "Copyright (C) Katherine Mayo. All Rights Reserved.",
-                "start": 0
-            };
+        async function handler(){
+            let response = await fetch('img/config.json');
+            let config = await response.json();
 
             let l = new lbox('lboxContainer', config);
         }
